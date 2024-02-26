@@ -6,14 +6,22 @@ typedef struct {
     node *end;
 } Queue;
 
-struct Args {
+typedef struct {
     Graph *graph;
     vertex v;
     int *m;
     ThreadPool *q;
-};
+} Args;
 
-typedef struct Args Args;
+typedef struct {
+    Graph *graph;
+    vertex origin;
+    vertex v;
+    int *m;
+    int *visitid;
+    ThreadPool *q;
+} BFSArgs;
+
 
 void addItem(Queue *queue, vertex u) {
     node *item = createNode(u);
@@ -46,6 +54,17 @@ Args* initArgs(Graph* graph, vertex v, int* m, ThreadPool* pool) {
     return args;
 }
 
+BFSArgs* initBFSArgs(Graph* graph, vertex origin, vertex v, int* m, int* visited, ThreadPool* pool) {
+    BFSArgs *args = malloc(sizeof(BFSArgs));
+    args->graph = graph;
+    args->origin = origin;
+    args->v = v;
+    args->m = m;
+    args->visitid = visited;
+    args->q = pool;
+    return args;
+}
+
 void distanceFromV(void *args) {
     Args *data = (Args *) args;
     Graph *graph = data->graph;
@@ -53,7 +72,6 @@ void distanceFromV(void *args) {
     int* m = data->m;
     ThreadPool *q = data->q;
     free(data);
-    printf("this is thread: %d\n", v);
 
     int* visited = (int*)calloc(graph->numVertices, sizeof(int));
     Queue queue = {NULL, NULL};
@@ -81,21 +99,97 @@ void distanceFromV(void *args) {
     --(q->runningThreads);
 }
 
-void bfs(Graph *graph, int **m) {
-    int numVertices = graph->numVertices;
-    Args *args;
-    TaskQueue q;
-    initQueue(&q);
-    ThreadPool pool = {4, 0, &q};
+void bfsVisit(void *args) {
+    BFSArgs *data = (BFSArgs *) args;
+    Graph *graph = data->graph;
+    vertex origin = data->origin;
+    vertex v = data->v;
+    int* m = data->m;
+    int *visited = data->visitid;
+    ThreadPool *q = data->q;
+    free(data);
 
-    for (vertex v = 0; v < graph->numVertices; v++) {
-        args = initArgs(graph, v, m[v], &pool);
+    BFSArgs *newArgs;
+    TaskQueue in_q;
+    initQueue(&in_q);
+    ThreadPool pool = {2, 0, &in_q};
 
-        TaskData td = {distanceFromV, (void *)args};
-        insert(pool.q, td);
-        
-        // distanceFromV(graph, m[v], v);    
+    node* neighbors = graph->adjacencyLists[v];
+    while (neighbors) {
+        vertex neighbor = neighbors->v;
+        if (!visited[neighbor]) {
+            m[neighbor] = m[v] + 1;
+            visited[v] = 1;
+
+            newArgs = initBFSArgs(graph, v, neighbor, m, visited, &pool);
+            TaskData td = {bfsVisit, (void *)newArgs};
+            insert(pool.q, td);
+        }
+
+        neighbors = neighbors->next;
     }
     runThreadPool(&pool);
+    --(q->runningThreads);
 }
+
+void parallelBFS(Graph *graph, int *m, vertex v) {
+    // Args *data = (Args *) args;
+    // Graph *graph = data->graph;
+    // vertex v = data->v;
+    // int* m = data->m;
+    // ThreadPool *q = data->q;
+    // free(data);
+
+    int* visited = (int*)calloc(graph->numVertices, sizeof(int));
+    Queue queue = {NULL, NULL};
+    // addItem(&queue, v);
+    m[v] = 0;
+    visited[v] = 1;
+
+    BFSArgs *newArgs;
+    TaskQueue in_q;
+    initQueue(&in_q);
+    ThreadPool pool = {2, 0, &in_q};
+
+    node* neighbors = graph->adjacencyLists[v];
+    while (neighbors) {
+        vertex neighbor = neighbors->v;
+        m[neighbor] = m[v] + 1;
+        visited[v] = 1;
+
+        newArgs = initBFSArgs(graph, v, neighbor, m, visited, &pool);
+        TaskData td = {bfsVisit, (void *)newArgs};
+        insert(pool.q, td);
+
+        neighbors = neighbors->next;
+    }
+
+    runThreadPool(&pool);
+    free(visited);
+    // --(q->runningThreads);
+}
+
+void bfs(Graph *graph, int **m) {
+    for (vertex v = 0; v < graph->numVertices; v++) {
+        parallelBFS(graph, m[v], v);    
+    }
+}
+
+// void bfs(Graph *graph, int **m) {
+//     int numVertices = graph->numVertices;
+//     Args *args;
+//     TaskQueue q;
+//     initQueue(&q);
+//     ThreadPool pool = {2, 0, &q};
+
+//     for (vertex v = 0; v < graph->numVertices; v++) {
+//         args = initArgs(graph, v, m[v], &pool);
+
+//         TaskData td = {parallelBFS, (void *)args};
+//         insert(pool.q, td);
+        
+//         // distanceFromV(graph, m[v], v);    
+//     }
+//     runThreadPool(&pool);
+// }
 
