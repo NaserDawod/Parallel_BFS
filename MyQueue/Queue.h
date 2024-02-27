@@ -27,6 +27,12 @@ typedef struct {
     ThreadPool *q;
 } BFSArgs;
 
+typedef struct {
+    vertex v;
+    int *m;
+    ThreadPool *q;
+} SetArgs;
+
 void addItem(Queue *queue, vertex u);
 
 vertex popItem(Queue *queue);

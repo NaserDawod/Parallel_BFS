@@ -22,6 +22,24 @@ BFSArgs* initBFSArgs(Graph* graph, Queue* levelK, vertex v, int* m, int* visited
     return args;
 }
 
+SetArgs* initI(vertex v, int* m, ThreadPool *q) {
+    SetArgs *args = malloc(sizeof(SetArgs));
+    args->v = v;
+    args->m = m;
+    args->q = q;
+    return args;
+}
+
+void setInfinety(void *args) {
+    SetArgs *data = (SetArgs *) args;
+    vertex v = data->v;
+    int* m = data->m;
+    ThreadPool *q = data->q;
+    free(data);
+    m[v] = -1;
+    --(q->runningThreads);
+}
+
 void expandVertex(void *args) {
     BFSArgs *data = (BFSArgs *) args;
     Graph *graph = data->graph;
@@ -57,13 +75,20 @@ void parallelBFS(void *args) {
     ThreadPool *q = data->q;
     free(data);
 
-    int* visited = (int*)calloc(graph->numVertices, sizeof(int));
-    m[v] = 0;
-    visited[v] = 1;
-
     TaskQueue in_q;
     initQueue(&in_q);
     ThreadPool pool = {2, 0, &in_q};
+
+    int* visited = (int*)calloc(graph->numVertices, sizeof(int));
+    for (int i = 0; i < graph->numVertices; i++) {
+        SetArgs *newArgs = initI(i, m, &pool);
+        TaskData td = {setInfinety, (void *)newArgs};
+        insert(pool.q, td);
+    }
+    runThreadPool(&pool);
+    
+    m[v] = 0;
+    visited[v] = 1;
 
     Queue levelK = {NULL, NULL};
     initMyQueue(&levelK);
