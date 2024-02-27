@@ -2,7 +2,7 @@
 TARGET = part_III.out
 
 # Source files
-SRCS = bfs.c main.c ThreadPool/* SyncGraph/*
+SRCS = bfs.c main.c ThreadPool/* SyncGraph/* MyQueue/*
 
 # Compiler and flags
 CC = gcc
